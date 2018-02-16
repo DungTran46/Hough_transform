@@ -5,6 +5,7 @@
 #define ROWS		(int)480
 #define COLUMNS		(int)640
 #define PI          3.14159265358979323846
+#define DIAGONAL    800
 void clear( unsigned char image[][COLUMNS] );
 void header( int row, int col, unsigned char head[32] );
 int getCoordinate(int i);
@@ -15,20 +16,31 @@ int getSGM(unsigned char ximage[ROWS][COLUMNS], unsigned char yimage[ROWS][COLUM
 void getBinary(unsigned char sgm[ROWS][COLUMNS],unsigned char biImage[ROWS][COLUMNS],int threshold);
 int main( int argc, char **argv )
 {
-	int				i,k, threshold, max[3],p,j;
-	float           buffer[500];
+	int				i,k, threshold,j,*voting[180], max,temp;
 	FILE			*fp;
-	unsigned char	image[ROWS][COLUMNS], ximage[ROWS][COLUMNS], yimage[ROWS][COLUMNS], SGM[ROWS][COLUMNS], biIMAGE[ROWS][COLUMNS], head[32];
-	char			filename[50], ifilename[50], ch;
-    strcpy ( filename, "image.raw" );
-	//memset ( voting, 0, sizeof(int) * 180 * 400 );
+	unsigned char	image[ROWS][COLUMNS], ximage[ROWS][COLUMNS], yimage[ROWS][COLUMNS], SGM[ROWS][COLUMNS], biIMAGE[ROWS][COLUMNS], head[32], acc[800][180];
+	char			filename[50], ifilename[50];
+    strcpy ( filename, "image" );
+    //memset ( voting, 0, sizeof(int) * 180 * 400 );
+    for(i=0;i<180;i++)
+    {
+        voting[i]=(int*)malloc(800*sizeof(int));
+    }
+    for(i=0;i<180;i++)
+    {
+        for(j=0;j<800;j++)
+            voting[i][j]=0;
+    }
+    for(i=0;i<180;i++)
+        for(j=0;j<800;j++)
+            acc[j][i]=0;
 	header ( ROWS, COLUMNS, head );
-
     clear( ximage );
     clear( yimage );
     clear( biIMAGE);
 		/* Read in the image */
-	if (!( fp = fopen( filename, "rb" ) ))
+    strcpy( ifilename, filename);
+	if (!( fp = fopen( strcat(ifilename, ".raw"), "rb" ) ))
 	{
 		fprintf( stderr, "error: couldn't open %s\n", argv[1] );
 		exit(1);
@@ -41,17 +53,12 @@ int main( int argc, char **argv )
 			exit(1);
 		}
 	fclose(fp);
-    printf("This assignment is too ");
-    max[0] = 0; //maximum of Gx
-    max[1] = 0; //maximum of Gy
-    max[2] = 0; //maximum of SGM
-
     /* Compute Gx, Gy, SGM, find out the maximum and normalize*/
 
     /*****************************************
     ************** CALCULATE Gx **************
     ******************************************/
-    max[0]=getDeDx(image, ximage);
+    getDeDx(image, ximage);
     /* Write Gx to a new image*/
     strcpy( ifilename, filename );
     if (!( fp = fopen( strcat( ifilename, "-x.ras" ), "wb" ) ))
@@ -67,7 +74,7 @@ int main( int argc, char **argv )
     /*****************************************
     ************** CALCULATE Gy **************
     ******************************************/
-    max[1]=getDeDy(image,yimage);
+    getDeDy(image,yimage);
             /* Write Gy to a new image */
     strcpy( ifilename, filename );
     if (!( fp = fopen( strcat( ifilename, "-y.ras" ), "wb" ) ))
@@ -83,7 +90,7 @@ int main( int argc, char **argv )
     /*****************************************
     ************** CALCULATE SGM **************
     ******************************************/
-    max[2]=getSGM(ximage,yimage,SGM);
+    getSGM(ximage,yimage,SGM);
     /* Write SGM to a new image */
     strcpy( ifilename, filename );
     if (!( fp = fopen( strcat( ifilename, "-s.ras" ), "wb" ) ))
@@ -100,9 +107,9 @@ int main( int argc, char **argv )
     /*****************************************
     ********* CALCULATE BINARY IMAGE *********
     ******************************************/
-    threshold=44;
+    //threshold=44;
+    threshold=52;
     getBinary(SGM,biIMAGE,threshold);
-    printf("Dung is crazy.");
     /* Write the binary image to a new image */
     strcpy( ifilename, filename );
     if (!( fp = fopen( strcat( ifilename, "-b.ras" ), "wb" ) ))
@@ -117,7 +124,8 @@ int main( int argc, char **argv )
     /*****************************************
     ********* Hough transform ****************
     ******************************************/
-    for(j=0;j<=180;j++)
+
+    for(j=0;j<180;j++)
     {
         for(i=0;i<ROWS;i++)
         {
@@ -125,17 +133,80 @@ int main( int argc, char **argv )
             {
                 if(biIMAGE[i][k]==255)
                 {
-                    buffer[i]= k*cos(j/180*PI)-i*sin(j/180*PI);
-                    printf("angle= %d buffer[%d]= %f \n",j,i,buffer[i]);
+                    temp= i*cos(j/180*PI)+k*sin(j/180*PI);
+                    if(temp<0)
+                    {
+                        temp= i*cos((j+180)/180*PI)+k*sin((j+180)/180*PI);
+                        //printf("%d\n",temp);
+                        acc[temp][j]+=1;
+                    }
+                    else
+                    {
+                        //printf("%d\n",temp);
+                        acc[temp][j]+=1;
+                    }
+
                 }
-
-
             }
         }
+    }
+    max=0;
+    for(i=0;i<180;i++)
+        for(j=0;j<800;j++)
+            if(acc[j][i]>max)
+                max=acc[i][j];
+    printf("max= %d\n",max);
+    temp=0;
+    for(i=0;i<180;i++)
+        for(j=0;j<800;j++)
+            if(acc[j][i]==max)
+            {
+                printf("i=%d,j=%d\n",i,j);
+                temp++;
+            }
+
+    printf("temp= %d\n",temp);
+    header ( 800, 180, head );
+    strcpy( ifilename, filename );
+     if (!( fp = fopen( strcat( ifilename, "-h1.ras" ), "wb" ) ))
+    {
+      fprintf( stderr, "error: could not open %s\n", ifilename );
+      exit( 1 );
+    }
+    fwrite( head, 4, 8, fp );
+    for ( i = 0 ; i < 800 ; i++ ) fwrite( acc[i], 1, 180, fp );
+    fclose( fp );
+
+
+    for(i=0;i<180;i++)
+    {
+        for(j=0;j<800;j++)
+            if(acc[j][i]==max)
+                acc[j][i]=255;
+            else
+                acc[j][i]=0;
+    }
+    strcpy( ifilename, filename );
+     if (!( fp = fopen( strcat( ifilename, "-h.ras" ), "wb" ) ))
+    {
+      fprintf( stderr, "error: could not open %s\n", ifilename );
+      exit( 1 );
+    }
+    fwrite( head, 4, 8, fp );
+
+    for ( i = 0 ; i < 800 ; i++ ) fwrite( acc[i], 1, 180, fp );
+    fclose( fp );
+
+
+    printf("done\n");
+    for(i=0;i<180;i++)
+    {
+        free(voting[i]);
     }
 
 	return 0;
 }
+
 int getSGM(unsigned char ximage[ROWS][COLUMNS], unsigned char yimage[ROWS][COLUMNS], unsigned char sgm[ROWS][COLUMNS])
 {
     int max=0;
@@ -160,10 +231,6 @@ int getSGM(unsigned char ximage[ROWS][COLUMNS], unsigned char yimage[ROWS][COLUM
         {
                 sgm[i][j]=(int)((buffer[i][j]/max)*255);
         }
-    }
-    for(i=0;i<ROWS;i++)
-    {
-        free(buffer[i]);
     }
     return max;
 }

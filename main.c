@@ -16,7 +16,7 @@ int getSGM(unsigned char ximage[ROWS][COLUMNS], unsigned char yimage[ROWS][COLUM
 void getBinary(unsigned char sgm[ROWS][COLUMNS],unsigned char biImage[ROWS][COLUMNS],int threshold);
 int main( int argc, char **argv )
 {
-	int				i,k, threshold,j,*voting[180], max,temp;
+	int				i,k, threshold,j,*voting[180], max,max1,max2,temp;
 	FILE			*fp;
 	unsigned char	image[ROWS][COLUMNS], ximage[ROWS][COLUMNS], yimage[ROWS][COLUMNS], SGM[ROWS][COLUMNS], biIMAGE[ROWS][COLUMNS], head[32], acc[800][180];
 	char			filename[50], ifilename[50];
@@ -32,8 +32,14 @@ int main( int argc, char **argv )
             voting[i][j]=0;
     }
     for(i=0;i<180;i++)
+    {
         for(j=0;j<800;j++)
+        {
             acc[j][i]=0;
+        }
+    }
+
+
 	header ( ROWS, COLUMNS, head );
     clear( ximage );
     clear( yimage );
@@ -108,7 +114,7 @@ int main( int argc, char **argv )
     ********* CALCULATE BINARY IMAGE *********
     ******************************************/
     //threshold=44;
-    threshold=52;
+    threshold=60;
     getBinary(SGM,biIMAGE,threshold);
     /* Write the binary image to a new image */
     strcpy( ifilename, filename );
@@ -124,7 +130,6 @@ int main( int argc, char **argv )
     /*****************************************
     ********* Hough transform ****************
     ******************************************/
-
     for(j=0;j<180;j++)
     {
         for(i=0;i<ROWS;i++)
@@ -133,12 +138,14 @@ int main( int argc, char **argv )
             {
                 if(biIMAGE[i][k]==255)
                 {
-                    temp= i*cos(j/180*PI)+k*sin(j/180*PI);
+                    //temp= i*cos((float)(j)/(float)(180)*PI)-k*sin((float)(j)/(float)(180)*PI);
+                    temp= k*cos((float)(j)/(float)(180)*PI)+i*sin((float)(j)/(float)(180)*PI);
                     if(temp<0)
                     {
-                        temp= i*cos((j+180)/180*PI)+k*sin((j+180)/180*PI);
+                        //temp= i*cos((float)(j+180)/(float)(180)*PI)-k*sin((float)(j+180)/(float)(180)*PI);
                         //printf("%d\n",temp);
-                        acc[temp][j]+=1;
+                        acc[-1*temp][j]+=1;
+                        continue;
                     }
                     else
                     {
@@ -150,22 +157,12 @@ int main( int argc, char **argv )
             }
         }
     }
-    max=0;
-    for(i=0;i<180;i++)
+    /*for(i=0;i<180;i++)
         for(j=0;j<800;j++)
-            if(acc[j][i]>max)
-                max=acc[i][j];
-    printf("max= %d\n",max);
-    temp=0;
-    for(i=0;i<180;i++)
-        for(j=0;j<800;j++)
-            if(acc[j][i]==max)
+            if(i==90 || j==400||j==300)
             {
-                printf("i=%d,j=%d\n",i,j);
-                temp++;
-            }
-
-    printf("temp= %d\n",temp);
+                acc[j][i]=255;
+            }*/
     header ( 800, 180, head );
     strcpy( ifilename, filename );
      if (!( fp = fopen( strcat( ifilename, "-h1.ras" ), "wb" ) ))
@@ -176,25 +173,79 @@ int main( int argc, char **argv )
     fwrite( head, 4, 8, fp );
     for ( i = 0 ; i < 800 ; i++ ) fwrite( acc[i], 1, 180, fp );
     fclose( fp );
+    /**************Find local Maxima****************/
+    max=0;
+    max1=0;
+    max2=0;
+    int max3=0;
+    int max_p=0,max_theta=0;
+    int max1_p=0,max1_theta=0;
+    int max2_p=0,max2_theta=0;
+    for(i=0;i<90;i++)
+        for(j=0;j<300;j++)
+            if(acc[j][i]>max)
+            {
+                max=acc[j][i];
+                max_p=j;
+                max_theta=i;
+            }
+    printf("max= %d max_p= %d max_theta=%d\n",max,max_p,max_theta);
+    for(i=89;i<180;i++)
+        for(j=0;j<300;j++)
+            if(acc[j][i]>max)
+            {
+                max1=acc[j][i];
+                max1_p=j;
+                max1_theta=i;
+            }
+     printf("max1= %d max1_p= %d max1_theta=%d\n",max1,max1_p,max1_theta);
+
+    for(i=89;i<180;i++)
+        for(j=299;j<800;j++)
+            if(acc[j][i]>max2&& acc[j][i]<max1)
+            {
+                max2=acc[j][i];
+                max2_p=j;
+                max2_theta=i;
+            }
+    printf("max2= %d max2_p= %d max2_theta=%d\n",max2,max2_p,max2_theta);
 
 
-    for(i=0;i<180;i++)
+    for(i=0;i<ROWS;i++)
     {
-        for(j=0;j<800;j++)
-            if(acc[j][i]==max)
-                acc[j][i]=255;
+        for(j=0;j<COLUMNS;j++)
+        {
+            temp=       j*cos((float)(max_theta)/(float)(180)*PI)+i*sin((float)(max_theta)/(float)(180)*PI);
+            int temp1=  j*cos((float)(max1_theta)/(float)(180)*PI)+i*sin((float)(max1_theta)/(float)(180)*PI);
+            int temp2=  j*cos((float)(max2_theta)/(float)(180)*PI)+i*sin((float)(max2_theta)/(float)(180)*PI);
+            if(abs(abs(temp)-max_p)<1)
+            {
+                biIMAGE[i][j]=255;
+            }
+            else if(abs(abs(temp1)-max1_p)<1 && temp1<0)
+            {
+                biIMAGE[i][j]=255;
+            }
+            //else if(temp2<0 && abs(abs(temp2)-max2_p)<1)
+            else if(abs(abs(temp2)-max2_p)<1)
+            {
+                biIMAGE[i][j]=255;
+            }
             else
-                acc[j][i]=0;
+                biIMAGE[i][j]=0;
+        }
     }
+
+    header ( ROWS, COLUMNS, head );
     strcpy( ifilename, filename );
-     if (!( fp = fopen( strcat( ifilename, "-h.ras" ), "wb" ) ))
+    if (!( fp = fopen( strcat( ifilename, "-f.ras" ), "wb" ) ))
     {
       fprintf( stderr, "error: could not open %s\n", ifilename );
       exit( 1 );
     }
     fwrite( head, 4, 8, fp );
 
-    for ( i = 0 ; i < 800 ; i++ ) fwrite( acc[i], 1, 180, fp );
+    for ( i = 0 ; i < ROWS ; i++ ) fwrite( biIMAGE[i], 1, COLUMNS, fp );
     fclose( fp );
 
 
